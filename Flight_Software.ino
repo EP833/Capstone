@@ -3,15 +3,16 @@
 #include <SPI.h>
 #include <SD.h>
 #include <MS5611.h>
+#include <Servo.h>
 
 
 // Create instances for IMU, SD, BARO
 Adafruit_LSM6DSO32 IMU;
 File dataFile;
 MS5611 BARO(0x77);
+Servo myservo;      // create servo object to control a servo
+String dataBuffer;  // string to buffer output
 
-// string to buffer output
-String dataBuffer;
 
 
 
@@ -27,6 +28,8 @@ const int IDLE_TIMER = 2000;        // Controls how fast the RGB LED will blink 
 const int LAUNCH_TIMER = 1000;      // Controls how fast data is written into dataBuffer (Higher number means writing data more slowly)
 const int APOGEE_TIMER = 2000;      // Controls how fast the RGB LED will blink while rocket has landed
 int COUNTER;
+int pos = 700;  // variable to store the servo position
+
 
 
 // Change these to set when rocket states get changed
@@ -54,7 +57,7 @@ bool LED_STATE = true;      // Used to toggle LEDs
 // 1 = rocket idles on launch pad
 // 2 = rocket has been launched
 // 3 = rocket has passed apogee
-int state = 1;
+int state = 2;
 
 // Setup IMU variables
 float GYRO_X, GYRO_Y, GYRO_Z;                // Holds gyroscope data in X, Y, Z
@@ -70,11 +73,12 @@ void setup() {
   Wire.begin();
   START_UP();
   IMU_SETP();
-  // SD_SETUP();
+  SD_SETUP();
   CALIBRATE_AND_OFFSET();
 
   // reserve 1 kB for String used as a dataBuffer
   dataBuffer.reserve(1024);
+  myservo.attach(6, 700, 1000);  // attaches the servo on pin 9 to the servo object
 }
 
 void loop() {
@@ -99,25 +103,6 @@ void loop() {
         MAG_ACCEL = calc_mag_accel(ACCEL_X, ACCEL_Y, ACCEL_Z);
         PRESSURE = BARO.getPressure();
         ALTITUDE = BARO.getAltitudeFeet();
-
-
-        // Serial.print("Accel: (");
-        // Serial.print(GYRO_X, 4);
-        // Serial.print(" ");
-        // Serial.print(GYRO_Y, 4);
-        // Serial.print(" ");
-        // Serial.println(GYRO_Z, 4);
-        // Serial.print(") ");
-
-        // Serial.print("Mag: ");
-        // Serial.print(MAG_ACCEL);
-        // Serial.print(", ");
-
-        // Serial.print("Pres / Alt: (");
-        // Serial.print(PRESSURE);
-        // Serial.print(", ");
-        // Serial.print(ALTITUDE - PAD_ALT);
-        // Serial.println(")");
 
         if (MAG_ACCEL > LAUNCH_ACCEL && ACCEL_LAUNCH == false) {
           // Serial.println("MAG SET TRUE");
@@ -151,31 +136,33 @@ void loop() {
         APOGEE = max(APOGEE, ALTITUDE);
 
         // Add all sensor data to dataBuffer string so that it can be saved to micro sd
-        if (currentMillis - previousMillis > LAUNCH_TIMER) {
-          dataBuffer += String(GYRO_X, 4);  // Turn sesor data into string and keep the first 4 decimals
-          dataBuffer += "  ";               // Leave a space between each sensor data item
-          dataBuffer += String(GYRO_Y, 4);
-          dataBuffer += "  ";
-          dataBuffer += String(GYRO_Z, 4);
-          dataBuffer += "  ";
-          dataBuffer += String(ACCEL_X, 4);
-          dataBuffer += "  ";
-          dataBuffer += String(ACCEL_Y, 4);
-          dataBuffer += "  ";
-          dataBuffer += String(ACCEL_Z, 4);
-          dataBuffer += "  ";
-          dataBuffer += String(PRESSURE, 4);
-          dataBuffer += "  ";
-          dataBuffer += String(ALTITUDE, 4);
-          dataBuffer += "\r\n";  // Start a new line for each new data point
-          previousMillis = currentMillis;
-          Serial.print("Unsaved data buffer length (in bytes): ");
-          Serial.println(dataBuffer.length());
-        }
+        // if (currentMillis - previousMillis > LAUNCH_TIMER) {
+        dataBuffer += String(GYRO_X, 4);  // Turn sesor data into string and keep the first 4 decimals
+        dataBuffer += "  ";               // Leave a space between each sensor data item
+        dataBuffer += String(GYRO_Y, 4);
+        dataBuffer += "  ";
+        dataBuffer += String(GYRO_Z, 4);
+        dataBuffer += "  ";
+        dataBuffer += String(ACCEL_X, 4);
+        dataBuffer += "  ";
+        dataBuffer += String(ACCEL_Y, 4);
+        dataBuffer += "  ";
+        dataBuffer += String(ACCEL_Z, 4);
+        dataBuffer += "  ";
+        dataBuffer += String(PRESSURE, 4);
+        dataBuffer += "  ";
+        dataBuffer += String(ALTITUDE, 4);
+        dataBuffer += "\r\n";  // Start a new line for each new data point
+        previousMillis = currentMillis;
+        Serial.print("Unsaved data buffer length (in bytes): ");
+        Serial.println(dataBuffer.length());
+        // }
 
         // check if the SD card is available to write data without blocking
         // and if the dataBuffered data is enough for the full chunk size
         unsigned int chunkSize = dataFile.availableForWrite();
+        Serial.print(" Chunk Size: ");
+        Serial.println(chunkSize);
         if (chunkSize && dataBuffer.length() >= chunkSize) {
           // write to file and blink LED
           digitalWrite(LED_BUILTIN, HIGH);
@@ -194,11 +181,16 @@ void loop() {
       }
     case 3:
       {
-        tone(buzzer, 500, 500);
         if (currentMillis - previousMillis > APOGEE_TIMER) {
           digitalWrite(green_led, LED_STATE);
           previousMillis = currentMillis;
           LED_STATE = !LED_STATE;
+          tone(buzzer, 2000, 50);
+          myservo.writeMicroseconds(pos);
+          if (pos > 1000) {
+            pos = 700;
+          }
+          pos += 100;
         }
       }
       break;
