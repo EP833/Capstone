@@ -1,12 +1,12 @@
-#include <SimpleKalmanFilter.h>
-#include <Adafruit_LSM6DSO32.h>
-#include <SPI.h>
-#include <SD.h>
-#include <MS5611.h>
-#include <Servo.h>
+#include <SimpleKalmanFilter.h>  // Kalman Filter library
+#include <Adafruit_LSM6DSO32.h>  // IMU library
+#include <SPI.h>                 // SPI library
+#include <SD.h>                  // SD Card library
+#include <MS5611.h>              // Barometer library
+#include <Servo.h>               // Servo library
 
 
-// Create instances for IMU, SD, BARO
+// Create objects for IMU, SD card file, BARO
 Adafruit_LSM6DSO32 IMU;
 File dataFile;
 MS5611 BARO(0x77);
@@ -18,12 +18,12 @@ String dataBuffer;  // string to buffer output
 SimpleKalmanFilter GYRO_FILTER(10.47, 10.47, 1);  // Filter for the roll axis
 
 
-const int chipSelect = 53;
-unsigned long previousMillis = 0;
-unsigned long currentMillis = 0;
-unsigned long dtPrevMillis = 0;
-unsigned long launchStart = 0;
-unsigned long launchTimer = 0;
+const int chipSelect = 53;         // Pin SD card CS pin is connectd to
+unsigned long previousMillis = 0;  // Used for blinking LEDs
+unsigned long currentMillis = 0;   // Used to see how long program has ran for
+unsigned long dtPrevMillis = 0;    // Used to calculate dt
+unsigned long launchStart = 0;     // Used to hold what time did the rocket launcg
+unsigned long launchTimer = 0;     // Used to hold how long rocket has been launched for
 
 
 
