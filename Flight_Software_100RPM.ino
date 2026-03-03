@@ -28,7 +28,7 @@ unsigned long launchTimer = 0;     // Used to hold how long rocket has been laun
 
 
 const int NUM_OF_SAMPLES = 1000;    // Controls how many samples will be taken while gyroscope is being calibrated
-const int CALIBRATION_TIMER = 400;  // Number of miliseconds until LED is toggled while being calibrated
+const int CALIBRATION_TIMER = 500;  // Number of miliseconds until LED is toggled while being calibrated
 const int IDLE_TIMER = 2000;        // Number of miliseconds until LED is toggled while idle
 const int LAND_TIMER = 500;         // Number of miliseconds until LED is toggled while rocket has landed
 int COUNTER;                        // Used in gyroscope calibration
@@ -85,6 +85,10 @@ float AoA;                          // Angle of attack to set servos to (rad)
 void setup() {
   Serial.begin(9600);
   pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(red_led, OUTPUT);
+  pinMode(green_led, OUTPUT);
+  pinMode(blue_led, OUTPUT);
+  pinMode(buzzer, OUTPUT);
   Wire.begin();
   START_UP();                //Starts the IMU, Barometer, and SD Card
   IMU_SETP();                // Sets up the IMU
@@ -100,15 +104,13 @@ void loop() {
     case 1:
       {
         if (currentMillis - previousMillis > IDLE_TIMER) {  // Toggles LED based on IDLE_TIMER
-          digitalWrite(LED_BUILTIN, LED_STATE);
-          previousMillis = currentMillis;
+          setColor(0, 0, 255, LED_STATE);
           LED_STATE = !LED_STATE;
+          previousMillis = currentMillis;
+          tone(buzzer, 1000, 100);
         }
         IMU.getEvent(&accel, &gyro, &temp);                       // Get all the IMU data and put into variables
         BARO.read();                                              // Read barometer pressure sensore
-        GYRO_X = gyro.gyro.x + OFFSET_X;                          // Put gyroscope data into each variable and add the offset
-        GYRO_Y = gyro.gyro.y + OFFSET_Y;                          //
-        GYRO_Z = gyro.gyro.z + OFFSET_Z;                          //
         ACCEL_X = accel.acceleration.x;                           // Put accelerometer data into each variable
         ACCEL_Y = accel.acceleration.y;                           //
         ACCEL_Z = accel.acceleration.z;                           //
@@ -146,27 +148,29 @@ void loop() {
         PRESSURE = BARO.getPressure();                       // Put pressure reading into variable
         ALTITUDE = BARO.getAltitudeFeet();                   // Put altitude reading into variable
         APOGEE = max(APOGEE, ALTITUDE);                      // Checks to see if current alitude can be considered apogee
+        dataBuffer += String(GYRO_X, 8);                     // Turn sesor data into string and keep the first 8 decimals
+        dataBuffer += " ";                                   // Leave a space between each sensor data item
+        dataBuffer += String(GYRO_Y, 8);                     //
+        dataBuffer += " ";                                   //
+        dataBuffer += String(GYRO_Z, 8);                     //
+        dataBuffer += " ";                                   //
+        dataBuffer += String(FILTER_DATA, 8);                //
+        dataBuffer += " ";                                   //
+        dataBuffer += String(ACCEL_X, 4);                    //
+        dataBuffer += " ";                                   //
+        dataBuffer += String(ACCEL_Y, 4);                    //
+        dataBuffer += " ";                                   //
+        dataBuffer += String(ACCEL_Z, 4);                    //
+        dataBuffer += " ";                                   //
+        dataBuffer += String(PRESSURE, 4);                   //
+        dataBuffer += " ";                                   //
+        dataBuffer += String(ALTITUDE, 4);                   //
+        dataBuffer += " ";                                   //
+        dataBuffer += String(launchTimer);                   //
+        dataBuffer += "\r\n";                                // Start a new line for each new data point
 
-        dataBuffer += String(GYRO_X, 8);       // Turn sesor data into string and keep the first 8 decimals
-        dataBuffer += " ";                     // Leave a space between each sensor data item
-        dataBuffer += String(GYRO_Y, 8);       //
-        dataBuffer += " ";                     //
-        dataBuffer += String(GYRO_Z, 8);       //
-        dataBuffer += " ";                     //
-        dataBuffer += String(FILTER_DATA, 8);  //
-        dataBuffer += " ";                     //
-        dataBuffer += String(ACCEL_X, 4);      //
-        dataBuffer += " ";                     //
-        dataBuffer += String(ACCEL_Y, 4);      //
-        dataBuffer += " ";                     ///
-        dataBuffer += String(ACCEL_Z, 4);      //
-        dataBuffer += " ";                     //
-        dataBuffer += String(PRESSURE, 4);     //
-        dataBuffer += " ";                     //
-        dataBuffer += String(ALTITUDE, 4);     ///
-        dataBuffer += " ";                     //
-        dataBuffer += String(currentMillis);   //
-        dataBuffer += "\r\n";                  // Start a new line for each new data point
+        //
+
         Serial.print("Unsaved data buffer length (in bytes): ");
         Serial.print(dataBuffer.length());
         Serial.print(" Time: ");
@@ -176,11 +180,11 @@ void loop() {
         // and if the dataBuffered data is enough for the full chunk size
         unsigned int chunkSize = dataFile.availableForWrite();
         if (chunkSize && dataBuffer.length() >= chunkSize) {
-          digitalWrite(LED_BUILTIN, HIGH);                // Turn LED on
+          setColor(255, 0, 255, LED_STATE);
           dataFile.write(dataBuffer.c_str(), chunkSize);  // Write to SD card
-          digitalWrite(LED_BUILTIN, LOW);                 // Turn LED off
           dataFile.flush();                               //Saves data to SD Card incase we lose power
           dataBuffer.remove(0, chunkSize);                // remove written data from dataBuffer
+          LED_STATE = !LED_STATE;
         }
 
         /////// START OF FIN CONTROL ////////
@@ -220,9 +224,16 @@ void loop() {
     case 3:
       {
         if (currentMillis - previousMillis > LAND_TIMER) {  // Toggles LED based on LAND_TIMER
-          digitalWrite(LED_BUILTIN, LED_STATE);
-          previousMillis = currentMillis;
+          tone(buzzer, 500, 100);
+          if (reached_target_1 && reached_target_2) {
+            setColor(0, 255, 0, LED_STATE);
+          } else if (reached_target_1 ^ reached_target_2) {
+            setColor(255, 255, 0, LED_STATE);
+          } else {
+            setColor(255, 0, 0, LED_STATE);
+          }
           LED_STATE = !LED_STATE;
+          previousMillis = currentMillis;
         }
       }
       break;
@@ -247,9 +258,9 @@ void CALIBRATE_AND_OFFSET() {
       GYRO_AVG_Y += GYRO_Y;                                      //
       GYRO_AVG_Z += GYRO_Z;                                      //
       if (currentMillis - previousMillis > CALIBRATION_TIMER) {  // Blink LED to show test is running
-        digitalWrite(LED_BUILTIN, LED_STATE);
-        previousMillis = currentMillis;
+        setColor(0, 0, 255, LED_STATE);
         LED_STATE = !LED_STATE;
+        previousMillis = currentMillis;
       }
     }
   }
@@ -277,9 +288,7 @@ void START_UP() {  // Starts the IMU, Barometer, and SD Card
     Serial.println("3. did you change the chipSelect pin to match your shield or module?");
     Serial.println("Note: press reset button on the board and reopen this Serial Monitor after fixing your issue!");
     while (1) {
-      digitalWrite(LED_BUILTIN, HIGH);
-      delay(100);
-      digitalWrite(LED_BUILTIN, LOW);
+      setColor(255, 0, 0, 1);
     }
   } else {
     Serial.println("SD Card Found!");
@@ -292,10 +301,8 @@ void START_UP() {  // Starts the IMU, Barometer, and SD Card
     Serial.println(BARO.getAddress());
   } else {
     Serial.println("MS5611 not found. halt.");
+    setColor(255, 0, 0, 1);
     while (1) {
-      digitalWrite(LED_BUILTIN, HIGH);
-      delay(100);
-      digitalWrite(LED_BUILTIN, LOW);
     }
   }
 
@@ -303,9 +310,7 @@ void START_UP() {  // Starts the IMU, Barometer, and SD Card
   // Check to see if IMU working
   if (!IMU.begin_I2C()) {
     while (1) {
-      digitalWrite(LED_BUILTIN, HIGH);
-      delay(100);
-      digitalWrite(LED_BUILTIN, LOW);
+      setColor(255, 0, 0, 1);
     }
   } else {
     Serial.println("LSM6DSO32 Found!");
@@ -326,13 +331,13 @@ void SD_SETUP() {
   fileName += fileType;  // Combines all the parts to make a file name Ex: T_3.txt
 
 
-  while (SD.exists(fileName)) {       // Checks to see if the file already exists on the SD card
-    digitalWrite(LED_BUILTIN, HIGH);  //Turn LED on
-    testRun += 1;                     // Increment testRun so we can test for next file
-    fileName = testName;              //
-    fileName += testRun;              //
-    fileName += fileType;             // Combines all the parts to make a file name Ex: T_3.txt
-    digitalWrite(LED_BUILTIN, LOW);   // Turn LED off
+  while (SD.exists(fileName)) {  // Checks to see if the file already exists on the SD card
+    setColor(0, 255, 0, LED_STATE);
+    LED_STATE = !LED_STATE;
+    testRun += 1;          // Increment testRun so we can test for next file
+    fileName = testName;   //
+    fileName += testRun;   //
+    fileName += fileType;  // Combines all the parts to make a file name Ex: T_3.txt
   }
 
 
@@ -365,4 +370,19 @@ float calc_mag_accel(float x, float y, float z) {
 
 float fmap(float x, float in_min, float in_max, float out_min, float out_max) {
   return float((x - in_min) * ((out_max - out_min) / (in_max - in_min))) + out_min;
+}
+
+void setColor(int red, int green, int blue, bool toggle) {
+  if (toggle) {
+    red = 255 - red;
+    green = 255 - green;
+    blue = 255 - blue;
+    analogWrite(red_led, red);
+    analogWrite(green_led, green);
+    analogWrite(blue_led, blue);
+  } else {
+    analogWrite(red_led, 255);
+    analogWrite(green_led, 255);
+    analogWrite(blue_led, 255);
+  }
 }
