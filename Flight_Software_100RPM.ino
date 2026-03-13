@@ -144,36 +144,35 @@ void loop() {
         dt = (currentMillis - dtPrevMillis) / 1000.0;          // Calucate dt
         launchTimer = (currentMillis - launchStart) / 1000.0;  // Calculate to see how long rocket has been considered launched
         IMU.getEvent(&accel, &gyro, &temp);                    // Get all the IMU data and put into variables
-        //  BARO.read();                                           // Read barometer pressure sensore
-        GYRO_X = gyro.gyro.x + OFFSET_X;                   // Put gyroscope data into each variable and add the offset
-        GYRO_Y = gyro.gyro.y + OFFSET_Y;                   //
-        GYRO_Z = gyro.gyro.z + OFFSET_Z;                   //
-        FILTER_DATA = GYRO_FILTER.updateEstimate(GYRO_X);  // Get the data but filtered **MIGHT BE TAKEN OUT**
-        Filter_n = FILTER_DATA * (60 / (2 * PI));          // Convert the spin of the rocket from rad/s to rpm
-        n = GYRO_X * (60 / (2 * PI));                      // Convert the spin of the rocket from rad/s to rpm
-        ACCEL_X = accel.acceleration.x;                    // Put accelerometer data into each variable
-        ACCEL_Y = accel.acceleration.y;                    //
-        ACCEL_Z = accel.acceleration.z;                    //
-        dataBuffer += String(GYRO_X, 6);                   // Turn sesor data into string and keep the first 8 decimals
-        dataBuffer += " ";                                 // Leave a space between each sensor data item
-        dataBuffer += String(GYRO_Y, 6);                   //
-        dataBuffer += " ";                                 //
-        dataBuffer += String(GYRO_Z, 6);                   //
-        dataBuffer += " ";                                 //
-        dataBuffer += String(FILTER_DATA, 6);              //
-        dataBuffer += " ";                                 //
-        dataBuffer += String(ACCEL_X, 6);                  //
-        dataBuffer += " ";                                 //
-        dataBuffer += String(ACCEL_Y, 6);                  //
-        dataBuffer += " ";                                 //
-        dataBuffer += String(ACCEL_Z, 6);                  //
-        dataBuffer += " ";                                 //
-        dataBuffer += String(servo_pos);                   //
-        dataBuffer += " ";                                 //
-        dataBuffer += String(AoA, 6);                      //
-        dataBuffer += " ";                                 //
-        dataBuffer += String(launchTimer, 4);              //
-        dataBuffer += "\r\n";                              // Start a new line for each new data point
+        GYRO_X = gyro.gyro.x + OFFSET_X;                       // Put gyroscope data into each variable and add the offset
+        GYRO_Y = gyro.gyro.y + OFFSET_Y;                       //
+        GYRO_Z = gyro.gyro.z + OFFSET_Z;                       //
+        FILTER_DATA = GYRO_FILTER.updateEstimate(GYRO_X);      // Get the data but filtered **MIGHT BE TAKEN OUT**
+        Filter_n = FILTER_DATA * (60 / (2 * PI));              // Convert the spin of the rocket from rad/s to rpm
+        n = GYRO_X * (60 / (2 * PI));                          // Convert the spin of the rocket from rad/s to rpm
+        ACCEL_X = accel.acceleration.x;                        // Put accelerometer data into each variable
+        ACCEL_Y = accel.acceleration.y;                        //
+        ACCEL_Z = accel.acceleration.z;                        //
+        dataBuffer += String(GYRO_X, 6);                       // Turn sesor data into string and keep the first 8 decimals
+        dataBuffer += " ";                                     // Leave a space between each sensor data item
+        dataBuffer += String(GYRO_Y, 6);                       //
+        dataBuffer += " ";                                     //
+        dataBuffer += String(GYRO_Z, 6);                       //
+        dataBuffer += " ";                                     //
+        dataBuffer += String(FILTER_DATA, 6);                  //
+        dataBuffer += " ";                                     //
+        dataBuffer += String(ACCEL_X, 6);                      //
+        dataBuffer += " ";                                     //
+        dataBuffer += String(ACCEL_Y, 6);                      //
+        dataBuffer += " ";                                     //
+        dataBuffer += String(ACCEL_Z, 6);                      //
+        dataBuffer += " ";                                     //
+        dataBuffer += String(servo_pos);                       //
+        dataBuffer += " ";                                     //
+        dataBuffer += String(AoA, 6);                          //
+        dataBuffer += " ";                                     //
+        dataBuffer += String(launchTimer, 4);                  //
+        dataBuffer += "\r\n";                                  // Start a new line for each new data point
 
 
         // check if the SD card is available to write data without blocking
@@ -199,14 +198,13 @@ void loop() {
             servo_pos = fmap(AoA, MIN_DEGREE, MAX_DEGREE, MIN_SIGNAL, MAX_SIGNAL);  // Changle the servo postion back to 0 AoA
             Serial.println("Out of range");
           }
-
-          if ((n >= (setpoint - 2)) && (n <= (setpoint + 2))) {  //Checks to see if we are in acceptable range for 100 RPM test
-            spin_time += dt;                                     // If in acceptable range then add how much time has passed to the timer
+          if ((abs(n) >= (abs(setpoint) - 2)) && (abs(n) <= (abs(setpoint) + 2))) {  //Checks to see if we are in acceptable range for 100 RPM test
+            spin_time += dt;                                                         // If in acceptable range then add how much time has passed to the timer
+          }
+          if ((abs(n) >= (abs(setpoint) - 10)) && (abs(n) <= (abs(setpoint) + 10))) {  //Checks to see if we are in acceptable range for 100 RPM test
+            backup_spin_time += dt;                                                    // If in acceptable range then add how much time has passed to the timer
           }
 
-          if ((n >= (setpoint - 10)) && (n <= (setpoint + 10))) {  //Checks to see if we are in acceptable range for 100 RPM test
-            backup_spin_time += dt;                                // If in acceptable range then add how much time has passed to the timer
-          }
 
           if (spin_time >= hold_time || backup_spin_time >= backup_hold_time) {  // If held for set time swap to next setpoint
             setpoint = -setpoint;                                                // Swap setpoint to next setpoint (ONLY USED IN 100 RPM TEST)
@@ -236,8 +234,7 @@ void loop() {
         Serial.print(GYRO_Z);
         Serial.println();
 
-        myservo.writeMicroseconds(servo_pos);  // Send command to servo to move them
-
+        myservo.writeMicroseconds(servo_pos);                                   // Send command to servo to move them
         if (launchTimer > flightTime) {                                         // Once 16 seconds have past the flight will be over
           servo_pos = fmap(0, MIN_DEGREE, MAX_DEGREE, MIN_SIGNAL, MAX_SIGNAL);  // Once were past apogee send the servos back to 0 AoA
           myservo.writeMicroseconds(servo_pos);                                 // Send command to servo
