@@ -122,7 +122,7 @@ void loop() {
         ACCEL_Z = accel.acceleration.z;                           //
         MAG_ACCEL = calc_mag_accel(ACCEL_X, ACCEL_Y, ACCEL_Z);    // Find magnitude of acceleration
         if (MAG_ACCEL > LAUNCH_ACCEL && ACCEL_LAUNCH == false) {  // Checks to see if we have launched by reading acceleromter data
-          ACCEL_LAUNCH = true;
+          ACCEL_LAUNCH = true;                                    // We have reached more than 3G of acceleration
         }
 
         if (ACCEL_LAUNCH == true) {  // If both checks are true then considered rocket launched
@@ -195,19 +195,17 @@ void loop() {
             servo_pos = fmap(AoA, MIN_DEGREE, MAX_DEGREE, MIN_SIGNAL, MAX_SIGNAL);  // Changle the servo postion back to 0 AoA
             Serial.println("Out of range");
           }
-
         } else {
           servo_pos = fmap(0, MIN_DEGREE, MAX_DEGREE, MIN_SIGNAL, MAX_SIGNAL);
         }
         /////// END OF FIN CONTROL ////////
 
-        myservo.writeMicroseconds(servo_pos);  // Send command to servo
-
-        if (launchTimer > flightTime) {
-          servo_pos = fmap(0, MIN_DEGREE, MAX_DEGREE, MIN_SIGNAL, MAX_SIGNAL);
-          myservo.writeMicroseconds(servo_pos);  // Send command to servo
-          dataFile.close();                      // Close SD Card to save all data
-          Serial.println("State set to: 3");     //
+        myservo.writeMicroseconds(servo_pos);                                   // Send command to servo to move them
+        if (launchTimer > flightTime) {                                         // Once 16 seconds have past the flight will be over
+          servo_pos = fmap(0, MIN_DEGREE, MAX_DEGREE, MIN_SIGNAL, MAX_SIGNAL);  // Once were past apogee send the servos back to 0 AoA
+          myservo.writeMicroseconds(servo_pos);                                 // Send command to servo
+          dataFile.close();                                                     // Close SD Card to save all data
+          Serial.println("State set to: 3");                                    //
           state = 3;
         }
         dtPrevMillis = currentMillis;  // Used to calculate dt
