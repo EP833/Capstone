@@ -128,7 +128,7 @@ void loop() {
         ACCEL_Z = accel.acceleration.z;                           //
         MAG_ACCEL = calc_mag_accel(ACCEL_X, ACCEL_Y, ACCEL_Z);    // Find magnitude of acceleration
         if (MAG_ACCEL > LAUNCH_ACCEL && ACCEL_LAUNCH == false) {  // Checks to see if we have launched by reading acceleromter data
-          ACCEL_LAUNCH = true;
+          ACCEL_LAUNCH = true;                                    // We have reached more than 3G of acceleration
         }
 
         if (ACCEL_LAUNCH == true) {  // If both checks are true then considered rocket launched
@@ -145,9 +145,8 @@ void loop() {
         launchTimer = (currentMillis - launchStart) / 1000.0;  // Calculate to see how long rocket has been considered launched
         IMU.getEvent(&accel, &gyro, &temp);                    // Get all the IMU data and put into variables
         //  BARO.read();                                           // Read barometer pressure sensore
-        GYRO_X = gyro.gyro.x + OFFSET_X;  // Put gyroscope data into each variable and add the offset
-        GYRO_Y = gyro.gyro.y + OFFSET_Y;  //
-        // GYRO_Y = -5;
+        GYRO_X = gyro.gyro.x + OFFSET_X;                   // Put gyroscope data into each variable and add the offset
+        GYRO_Y = gyro.gyro.y + OFFSET_Y;                   //
         GYRO_Z = gyro.gyro.z + OFFSET_Z;                   //
         FILTER_DATA = GYRO_FILTER.updateEstimate(GYRO_X);  // Get the data but filtered **MIGHT BE TAKEN OUT**
         Filter_n = FILTER_DATA * (60 / (2 * PI));          // Convert the spin of the rocket from rad/s to rpm
@@ -195,9 +194,9 @@ void loop() {
           AoA += Kp * error + Ki * integral;           // Find new angle of attack based on PI gains
           AoA = max(-max_angle, min(max_angle, AoA));  // Does not allow the AoA to be greater than 5° or less than -5°
           servo_pos = fmap(AoA, MIN_DEGREE, MAX_DEGREE, MIN_SIGNAL, MAX_SIGNAL);
-          if (abs(GYRO_Y) >= MAX_GYRO_RANGE || abs(GYRO_Z) >= MAX_GYRO_RANGE) {
-            AoA = 0;
-            servo_pos = fmap(AoA, MIN_DEGREE, MAX_DEGREE, MIN_SIGNAL, MAX_SIGNAL);
+          if (abs(GYRO_Y) >= MAX_GYRO_RANGE || abs(GYRO_Z) >= MAX_GYRO_RANGE) {     // Saftey Mechanisms
+            AoA = 0;                                                                //Set AoA back to 0 to reset fin angle
+            servo_pos = fmap(AoA, MIN_DEGREE, MAX_DEGREE, MIN_SIGNAL, MAX_SIGNAL);  // Changle the servo postion back to 0 AoA
             Serial.println("Out of range");
           }
 
@@ -219,7 +218,7 @@ void loop() {
             backup_spin_time = 0;                                                // Reset spin time
           }
         } else {
-          servo_pos = fmap(0, MIN_DEGREE, MAX_DEGREE, MIN_SIGNAL, MAX_SIGNAL);
+          servo_pos = fmap(0, MIN_DEGREE, MAX_DEGREE, MIN_SIGNAL, MAX_SIGNAL);  // Keep the fins at 0 AoA while in flight
         }
 
         /////// END OF FIN CONTROL ////////
@@ -237,13 +236,13 @@ void loop() {
         Serial.print(GYRO_Z);
         Serial.println();
 
-        myservo.writeMicroseconds(servo_pos);  // Send command to servo
+        myservo.writeMicroseconds(servo_pos);  // Send command to servo to move them
 
-        if (launchTimer > flightTime) {
-          servo_pos = fmap(0, MIN_DEGREE, MAX_DEGREE, MIN_SIGNAL, MAX_SIGNAL);
-          myservo.writeMicroseconds(servo_pos);  // Send command to servo
-          dataFile.close();                      // Close SD Card to save all data
-          Serial.println("State set to: 3");     //
+        if (launchTimer > flightTime) {                                         // Once 16 seconds have past the flight will be over
+          servo_pos = fmap(0, MIN_DEGREE, MAX_DEGREE, MIN_SIGNAL, MAX_SIGNAL);  // Once were past apogee send the servos back to 0 AoA
+          myservo.writeMicroseconds(servo_pos);                                 // Send command to servo
+          dataFile.close();                                                     // Close SD Card to save all data
+          Serial.println("State set to: 3");                                    //
           state = 3;
         }
         dtPrevMillis = currentMillis;  // Used to calculate dt
@@ -253,15 +252,15 @@ void loop() {
       {
         if (currentMillis - previousMillis > LAND_TIMER) {  // Toggles LED based on LAND_TIMER
           tone(buzzer, 500, 100);
-          if (reached_target_1 && reached_target_2) {
-            setColor(0, 255, 0, LED_STATE);  // Set LED to green
-          } else if (reached_target_1 ^ reached_target_2) {
-            setColor(255, 255, 0, LED_STATE);  // Set LED to yellow
-          } else {
-            setColor(255, 0, 0, LED_STATE);  // Set LED to red
+          if (reached_target_1 && reached_target_2) {        // If both setpoints were reached
+            setColor(0, 255, 0, LED_STATE);                  // Set LED to green
+          } else if (reached_target_1 ^ reached_target_2) {  // If only one setpoint was set true
+            setColor(255, 255, 0, LED_STATE);                // Set LED to yellow
+          } else {                                           // If no setpoints were reached
+            setColor(255, 0, 0, LED_STATE);                  // Set LED to red
           }
-          LED_STATE = !LED_STATE;
-          previousMillis = currentMillis;
+          LED_STATE = !LED_STATE;          // Toggle LED STATE
+          previousMillis = currentMillis;  // Check how much time has passed
         }
       }
       break;
