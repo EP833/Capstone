@@ -189,12 +189,12 @@ void loop() {
 
         /////// START OF FIN CONTROL ////////
         if (launchTimer >= 3 && (reached_target_1 == false || reached_target_2 == false)) {
-          error = setpoint - n;                        // Find the error between the setpoint and the current RPM
-          integral = integral + error * dt;            // Calculates the integral
-          AoA += Kp * error + Ki * integral;           // Find new angle of attack based on PI gains
-          AoA = max(-max_angle, min(max_angle, AoA));  // Does not allow the AoA to be greater than 5° or less than -5°
-          servo_pos = fmap(AoA, MIN_DEGREE, MAX_DEGREE, MIN_SIGNAL, MAX_SIGNAL);
-          if (abs(GYRO_Y) >= MAX_GYRO_RANGE || abs(GYRO_Z) >= MAX_GYRO_RANGE) {     // Saftey Mechanisms
+          error = setpoint - n;                                                     // Find the error between the setpoint and the current RPM
+          integral = integral + error * dt;                                         // Calculates the integral
+          AoA += Kp * error + Ki * integral;                                        // Find new angle of attack based on PI gains
+          AoA = max(-max_angle, min(max_angle, AoA));                               // Does not allow the AoA to be greater than 5° or less than -5°
+          servo_pos = fmap(AoA, MIN_DEGREE, MAX_DEGREE, MIN_SIGNAL, MAX_SIGNAL);    // Find the conversion of an AoA to a servo command
+          if (abs(GYRO_Y) >= MAX_GYRO_RANGE || abs(GYRO_Z) >= MAX_GYRO_RANGE) {     // Saftey Mechanisms if other 2 AXIS are rotating, should not exceed 3 rad/s
             AoA = 0;                                                                //Set AoA back to 0 to reset fin angle
             servo_pos = fmap(AoA, MIN_DEGREE, MAX_DEGREE, MIN_SIGNAL, MAX_SIGNAL);  // Changle the servo postion back to 0 AoA
             Serial.println("Out of range");
