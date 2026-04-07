@@ -16,7 +16,7 @@ String dataBuffer;  // string to buffer output
 
 
 
-SimpleKalmanFilter GYRO_FILTER(10.47, 10.47, 10);  // Filter for the roll axis
+SimpleKalmanFilter GYRO_FILTER(2, 2, 1);  // Filter for the roll axis
 
 
 const int chipSelect = 53;         // Pin SD card CS pin is connectd to
@@ -25,7 +25,7 @@ unsigned long currentMillis = 0;   // Used to see how long program has ran for
 unsigned long dtPrevMillis = 0;    // Used to calculate dt
 unsigned long launchStart = 0;     // Used to hold what time did the rocket launcg
 float launchTimer;                 // Used to hold how long rocket has been launched for
-const int flightTime = 16;         // How long the flight takes in seconds
+const int flightTime = 18;         // How long the flight takes in seconds
 
 
 const int NUM_OF_SAMPLES = 1000;    // Controls how many samples will be taken while gyroscope is being calibrated
@@ -60,7 +60,7 @@ bool LED_STATE = true;      // Used to toggle LEDs
 // 1 = rocket idles on launch pad
 // 2 = rocket has been launched
 // 3 = rocket has passed apogee
-int state = 1;
+int state = 2;
 
 // Setup IMU variables
 float GYRO_X, GYRO_Y, GYRO_Z, FILTER_DATA, n, Filter_n;  // Holds gyroscope data in X, Y, Z
@@ -70,29 +70,28 @@ float ACCEL_X, ACCEL_Y, ACCEL_Z, MAG_ACCEL;              // Holds accel data in 
 float MAX_GYRO_RANGE = 4;                                // Max spin for other axis (rad/s)
 
 // Define control variables
-float Kp = 5.9e-6, Ki = 20e-7;      // Proportional, Integral ,Derivative  Gains
-float setpoint = 100;               // Goal value (rpm)
-float error;                        // Difference between setpoint and current value
-float integral = 0;                 // The accumalitive error in integration
-float dt;                           // Sampling Interval
-bool reached_target_1 = false;      // Used for checking to see if first spin rate has been reached
-bool reached_target_2 = false;      // Used for checking to see if second spin rate has been reached
-float spin_time = 0;                // Holds how long rocket has spun for
-float backup_spin_time = 0;         // Holds how long rocket has spun for
-const float hold_time = 2;          // How long to hold spin (s)
-const float backup_hold_time = 4;   // How long to hold spin (s)
-const float max_angle = 0.0872665;  // max angle servos can be rotated (5 degree in rad)
-int servo_pos;                      // variable to store the servo position
-float AoA = 0;                      // Angle of attack to set servos to (rad)
+float Kp = 5.9e-6, Ki = 20e-7;          // Proportional, Integral ,Derivative  Gains
+float setpoint = -100;                   // Goal value (rpm)
+float error;                            // Difference between setpoint and current value
+float integral = 0;                     // The accumalitive error in integration
+float dt;                               // Sampling Interval
+bool reached_target_1 = false;          // Used for checking to see if first spin rate has been reached
+bool reached_target_2 = false;          // Used for checking to see if second spin rate has been reached
+float spin_time = 0;                    // Holds how long rocket has spun for
+float backup_spin_time = 0;             // Holds how long rocket has spun for
+const float hold_time = 2;              // How long to hold spin (s)
+const float backup_hold_time = 4;       // How long to hold spin (s)
+const float max_angle = 2 * 0.0872665;  // max angle servos can be rotated (10 degree in rad)
+int servo_pos;                          // variable to store the servo position
+float AoA = 0;                          // Angle of attack to set servos to (rad)
 
 
 
 // USED IN FMAP
-int MIN_SIGNAL = 630;
-int MAX_SIGNAL = 750;
-
-float MIN_DEGREE = 0.2530727415;
-float MAX_DEGREE = -0.2234021443;
+int LOW_SIGNAL = 710;
+float LOW_SIGNAL_ANGLE = -0.1745329252;  // rad
+int HIGH_SIGNAL = 630;
+float HIGH_SIGNAL_ANGLE = 0.1605702912;  // rad
 
 void setup() {
   Serial.begin(9600);
@@ -101,14 +100,15 @@ void setup() {
   pinMode(blue_led, OUTPUT);
   pinMode(buzzer, OUTPUT);
   Wire.begin();
-  START_UP();                                                             //Starts the IMU, Barometer, and SD Card
-  IMU_SETP();                                                             // Sets up the IMU
-  SD_SETUP();                                                             // Sets up the SD
-  CALIBRATE_AND_OFFSET();                                                 // Calibrates gyroscope
-  myservo.attach(6);                                                      // attaches the servo on pin 9 to the servo object
-  servo_pos = fmap(AoA, MIN_DEGREE, MAX_DEGREE, MIN_SIGNAL, MAX_SIGNAL);  //
-  myservo.writeMicroseconds(servo_pos);                                   // Send command to servo
-  dataBuffer.reserve(1024);                                               // reserve 1 kB for String used as a dataBuffer
+  START_UP();                                                                           //Starts the IMU, Barometer, and SD Card
+  IMU_SETP();                                                                           // Sets up the IMU
+  SD_SETUP();                                                                           // Sets up the SD
+  CALIBRATE_AND_OFFSET();                                                               // Calibrates gyroscope
+  myservo.attach(6);                                                                    // attaches the servo on pin 9 to the servo object
+  AoA = 0;                                                                              // Angle of attack to set servos to (rad)
+  servo_pos = fmap(AoA, LOW_SIGNAL_ANGLE, HIGH_SIGNAL_ANGLE, LOW_SIGNAL, HIGH_SIGNAL);  //
+  myservo.writeMicroseconds(servo_pos);                                                 // Send command to servo
+  dataBuffer.reserve(1024);                                                             // reserve 1 kB for String used as a dataBuffer
 }
 
 void loop() {
@@ -148,8 +148,7 @@ void loop() {
         GYRO_Y = gyro.gyro.y + OFFSET_Y;                       //
         GYRO_Z = gyro.gyro.z + OFFSET_Z;                       //
         FILTER_DATA = GYRO_FILTER.updateEstimate(GYRO_X);      // Get the data but filtered **MIGHT BE TAKEN OUT**
-        Filter_n = FILTER_DATA * (60 / (2 * PI));              // Convert the spin of the rocket from rad/s to rpm
-        n = GYRO_X * (60 / (2 * PI));                          // Convert the spin of the rocket from rad/s to rpm
+        n = FILTER_DATA * (60 / (2 * PI));                     // Convert the spin of the rocket from rad/s to rpm
         ACCEL_X = accel.acceleration.x;                        // Put accelerometer data into each variable
         ACCEL_Y = accel.acceleration.y;                        //
         ACCEL_Z = accel.acceleration.z;                        //
@@ -188,23 +187,23 @@ void loop() {
 
         /////// START OF FIN CONTROL ////////
         if (launchTimer >= 3 && (reached_target_1 == false || reached_target_2 == false)) {
-          error = setpoint - n;                                                     // Find the error between the setpoint and the current RPM
-          integral = integral + error * dt;                                         // Calculates the integral
-          AoA += Kp * error + Ki * integral;                                        // Find new angle of attack based on PI gains
-          AoA = max(-max_angle, min(max_angle, AoA));                               // Does not allow the AoA to be greater than 5° or less than -5°
-          servo_pos = fmap(AoA, MIN_DEGREE, MAX_DEGREE, MIN_SIGNAL, MAX_SIGNAL);    // Find the conversion of an AoA to a servo command
-          if (abs(GYRO_Y) >= MAX_GYRO_RANGE || abs(GYRO_Z) >= MAX_GYRO_RANGE) {     // Saftey Mechanisms if other 2 AXIS are rotating, should not exceed 3 rad/s
-            AoA = 0;                                                                //Set AoA back to 0 to reset fin angle
-            servo_pos = fmap(AoA, MIN_DEGREE, MAX_DEGREE, MIN_SIGNAL, MAX_SIGNAL);  // Changle the servo postion back to 0 AoA
+          error = setpoint - n;                                                                   // Find the error between the setpoint and the current RPM
+          integral = integral + error * dt;                                                       // Calculates the integral
+          AoA += Kp * error + Ki * integral;                                                      // Find new angle of attack based on PI gains
+          AoA = max(-max_angle, min(max_angle, AoA));                                             // Does not allow the AoA to be greater than 5° or less than -5°
+          servo_pos = fmap(AoA, LOW_SIGNAL_ANGLE, HIGH_SIGNAL_ANGLE, LOW_SIGNAL, HIGH_SIGNAL);    // Find the conversion of an AoA to a servo command
+          if (abs(GYRO_Y) >= MAX_GYRO_RANGE || abs(GYRO_Z) >= MAX_GYRO_RANGE) {                   // Saftey Mechanisms if other 2 AXIS are rotating, should not exceed 3 rad/s
+            AoA = 0;                                                                              //Set AoA back to 0 to reset fin angle
+            servo_pos = fmap(AoA, LOW_SIGNAL_ANGLE, HIGH_SIGNAL_ANGLE, LOW_SIGNAL, HIGH_SIGNAL);  // Changle the servo postion back to 0 AoA
             Serial.println("Out of range");
           }
+
           if ((abs(n) >= (abs(setpoint) - 2)) && (abs(n) <= (abs(setpoint) + 2))) {  //Checks to see if we are in acceptable range for 100 RPM test
             spin_time += dt;                                                         // If in acceptable range then add how much time has passed to the timer
           }
           if ((abs(n) >= (abs(setpoint) - 10)) && (abs(n) <= (abs(setpoint) + 10))) {  //Checks to see if we are in acceptable range for 100 RPM test
             backup_spin_time += dt;                                                    // If in acceptable range then add how much time has passed to the timer
           }
-
 
           if (spin_time >= hold_time || backup_spin_time >= backup_hold_time) {  // If held for set time swap to next setpoint
             setpoint = -setpoint;                                                // Swap setpoint to next setpoint (ONLY USED IN 100 RPM TEST)
@@ -216,7 +215,7 @@ void loop() {
             backup_spin_time = 0;                                                // Reset spin time
           }
         } else {
-          servo_pos = fmap(0, MIN_DEGREE, MAX_DEGREE, MIN_SIGNAL, MAX_SIGNAL);  // Keep the fins at 0 AoA while in flight
+          servo_pos = fmap(AoA, LOW_SIGNAL_ANGLE, HIGH_SIGNAL_ANGLE, LOW_SIGNAL, HIGH_SIGNAL);  // Keep the fins at 0 AoA while in flight
         }
 
         /////// END OF FIN CONTROL ////////
@@ -234,12 +233,12 @@ void loop() {
         Serial.print(GYRO_Z);
         Serial.println();
 
-        myservo.writeMicroseconds(servo_pos);                                   // Send command to servo to move them
-        if (launchTimer > flightTime) {                                         // Once 16 seconds have past the flight will be over
-          servo_pos = fmap(0, MIN_DEGREE, MAX_DEGREE, MIN_SIGNAL, MAX_SIGNAL);  // Once were past apogee send the servos back to 0 AoA
-          myservo.writeMicroseconds(servo_pos);                                 // Send command to servo
-          dataFile.close();                                                     // Close SD Card to save all data
-          Serial.println("State set to: 3");                                    //
+        myservo.writeMicroseconds(servo_pos);                                                   // Send command to servo to move them
+        if (launchTimer > flightTime) {                                                         // Once 16 seconds have past the flight will be over
+          servo_pos = fmap(AoA, LOW_SIGNAL_ANGLE, HIGH_SIGNAL_ANGLE, LOW_SIGNAL, HIGH_SIGNAL);  // Once were past apogee send the servos back to 0 AoA
+          myservo.writeMicroseconds(servo_pos);                                                 // Send command to servo
+          dataFile.close();                                                                     // Close SD Card to save all data
+          Serial.println("State set to: 3");                                                    //
           state = 3;
         }
         dtPrevMillis = currentMillis;  // Used to calculate dt
@@ -247,6 +246,8 @@ void loop() {
       }
     case 3:
       {
+        servo_pos = fmap(0, LOW_SIGNAL_ANGLE, HIGH_SIGNAL_ANGLE, LOW_SIGNAL, HIGH_SIGNAL);  // Once were past apogee send the servos back to 0 AoA
+
         if (currentMillis - previousMillis > LAND_TIMER) {  // Toggles LED based on LAND_TIMER
           tone(buzzer, 500, 100);
           if (reached_target_1 && reached_target_2) {        // If both setpoints were reached
@@ -361,7 +362,7 @@ void SD_SETUP() {
 // Sets up the IMU
 void IMU_SETP() {
   // Change IMU ranges
-  IMU.setGyroRange(LSM6DS_GYRO_RANGE_1000_DPS);
+  IMU.setGyroRange(LSM6DS_GYRO_RANGE_2000_DPS);
   IMU.setAccelRange(LSM6DSO32_ACCEL_RANGE_16_G);
 
 
