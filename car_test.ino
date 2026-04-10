@@ -102,23 +102,29 @@ void loop() {
   // Read IMU
   IMU.getEvent(&accel, &gyro, &temp);
 
+  // Store IMU data into variables
   GYRO_X = gyro.gyro.x + OFFSET_X;
   GYRO_Y = gyro.gyro.y + OFFSET_Y;
   GYRO_Z = gyro.gyro.z + OFFSET_Z;
+  ACCEL_X = accel.acceleration.x;
+  ACCEL_Y = accel.acceleration.y;
+  ACCEL_Z = accel.acceleration.z;
 
   // Convert to RPM
   n = GYRO_X * (60 / (2 * PI));
 
+  // Filter RPM data
+  filtered_n = GYRO_FILTER.updateEstimate(GYRO_X);
+
   // ===== PI CONTROL =====
-  error = setpoint - n;
+  error = setpoint - filtered_n;
   if (abs(error) < 1.0) {  // 1 RPM deadband (tune this)
     error = 0;
   }
+
+  // Calculate PI values
   integral += error * dt;
-
-  // Integral windup protection
-  // integral = max(-integral_limit, min(integral_limit, integral));
-
+  // integral = max(-integral_limit, min(integral_limit, integral));   // Integral windup protection
   AoA = Kp * error + Ki * integral;
 
   // Clamp AoA to always stay within min and max angles used in fmap
@@ -142,11 +148,16 @@ void loop() {
   Serial.println(servo_pos);
 
   // ===== SD LOGGING =====
+  dataBuffer += String(ACCEL_X, 6); dataBuffer += " ";
+  dataBuffer += String(ACCEL_Y, 6); dataBuffer += " ";
+  dataBuffer += String(ACCEL_Z, 6); dataBuffer += " ";
   dataBuffer += String(GYRO_X, 6); dataBuffer += " ";
   dataBuffer += String(GYRO_Y, 6); dataBuffer += " ";
   dataBuffer += String(GYRO_Z, 6); dataBuffer += " ";
   dataBuffer += String(n, 6);      dataBuffer += " ";
+  dataBuffer += String(filtered_n, 6); dataBuffer += " ";
   dataBuffer += String(AoA, 6);    dataBuffer += " ";
+  dataBuffer += String(currentMillis, 4); dataBuffer += " ";
   dataBuffer += String(servo_pos); dataBuffer += "\r\n";
 
   unsigned int chunkSize = dataFile.availableForWrite();
