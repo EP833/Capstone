@@ -24,7 +24,7 @@ const int buzzer = 5;
 unsigned long currentMillis = 0;
 unsigned long dtPrevMillis = 0;
 float dt;
-
+float runtime;
 // Calibration
 const int NUM_OF_SAMPLES = 1000;
 int COUNTER;
@@ -39,17 +39,18 @@ float OFFSET_X, OFFSET_Y, OFFSET_Z;
 float GYRO_AVG_X, GYRO_AVG_Y, GYRO_AVG_Z;
 
 // Control variables
-float Kp = 5.9e-4, Ki = 20e-5;  // UNCHANGED
+float Kp = 5.9e-3, Ki = 20e-4;
 float setpoint = 0;
 float error;
 float integral = 0;
-float integral_limit = 1000;    // ✅ added limit
-
+float integral_limit = 500;    // added limit
+float ACCEL_X, ACCEL_Y, ACCEL_Z, MAG_ACCEL;              // Holds accel data in X, Y, Z and magnitude
 float n; // RPMk,
+float filtered_n; // RPMk,
 
 // const float max_angle = 0.0872665; // 5 deg
 float AoA = 0;
-
+float AoA_degree;
 // Servo mapping
 int MIN_SIGNAL = 600;
 float MIN_DEGREE = -15*PI/180; // min angle in rads
@@ -90,10 +91,10 @@ void setup() {
 // ================= LOOP =================
 void loop() {
   currentMillis = millis();
-
+  runtime = currentMillis/1000;
   // ===== SLOW LOOP so that code runs once every 20 ms=====
   static unsigned long lastControl = 0;
-  if (currentMillis - lastControl < 20) return;
+  // if (currentMillis - lastControl < 20) return;
   lastControl = currentMillis;
 
   dt = (currentMillis - dtPrevMillis) / 1000.0;
@@ -118,18 +119,20 @@ void loop() {
 
   // ===== PI CONTROL =====
   error = setpoint - filtered_n;
+  /*
   if (abs(error) < 1.0) {  // 1 RPM deadband (tune this)
     error = 0;
   }
-
+  */
   // Calculate PI values
   integral += error * dt;
-  // integral = max(-integral_limit, min(integral_limit, integral));   // Integral windup protection
-  AoA = Kp * error + Ki * integral;
+  integral = max(-integral_limit, min(integral_limit, integral));   // Integral windup protection
+  if (filtered_n >= -1 && filtered_n <= 1) integral = 0; // Integral deadband (tune this){
+  AoA = -(Kp * error + Ki * integral);
 
   // Clamp AoA to always stay within min and max angles used in fmap
   AoA = max(MIN_DEGREE, min(MAX_DEGREE, AoA));
-
+  AoA_degree = AoA*PI/180;
   // Safety check
   // if (abs(GYRO_Y) >= MAX_GYRO_RANGE || abs(GYRO_Z) >= MAX_GYRO_RANGE) {
   //   AoA = 0;
@@ -154,10 +157,11 @@ void loop() {
   dataBuffer += String(GYRO_X, 6); dataBuffer += " ";
   dataBuffer += String(GYRO_Y, 6); dataBuffer += " ";
   dataBuffer += String(GYRO_Z, 6); dataBuffer += " ";
+  dataBuffer += String(integral, 6); dataBuffer += " ";
+  dataBuffer += String(runtime, 3); dataBuffer += " ";
   dataBuffer += String(n, 6);      dataBuffer += " ";
   dataBuffer += String(filtered_n, 6); dataBuffer += " ";
   dataBuffer += String(AoA, 6);    dataBuffer += " ";
-  dataBuffer += String(currentMillis, 4); dataBuffer += " ";
   dataBuffer += String(servo_pos); dataBuffer += "\r\n";
 
   unsigned int chunkSize = dataFile.availableForWrite();
@@ -222,7 +226,9 @@ void SD_SETUP() {
   }
 
   dataFile = SD.open(fileName, FILE_WRITE);
-  dataFile.println("GX GY GZ RPM AoA Servo");
+  dataFile.print("Kp = "); dataFile.print(Kp, 6);
+  dataFile.print(", Ki = "); dataFile.println(Ki, 6);
+  dataFile.println("AX AY AZ GX GY GZ Integral Runtime RPM AoA Servo");
   dataFile.flush();
 
   Serial.print("Logging to: ");
